@@ -109,9 +109,23 @@ if __name__ == "__main__":
 		network = os.path.join(configs_dir, network)
 	
 	print(ngp.LensMode)
+
 	testbed = ngp.Testbed(mode)
 	testbed.nerf.sharpen = float(args.sharpen)
 	testbed.exposure = args.exposure
+	#testbed.background_color = [0.000, 0.000, 0.000, 1.000]
+	#testbed.exposure = 0.000
+	#testbed.sun_dir = [0.577,0.577,0.577]
+	#testbed.up_dir = [0.000,1.000,0.000]
+	#testbed.view_dir = [0.000,-1.000,-0.000]
+	#testbed.look_at = [0.500,-0.500,0.500]
+	#testbed.scale = 1.500
+	#testbed.fov = 50.625
+	#testbed.aperture_size = 0
+	#testbed.slice_plane_z = -1
+	testbed.autofocus_target = [0.500,0.500,0.500]
+	testbed.autofocus = True
+
 	if mode == ngp.TestbedMode.Sdf:
 		testbed.tonemap_curve = ngp.TonemapCurve.ACES
 
