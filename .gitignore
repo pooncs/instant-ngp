@@ -13,5 +13,4 @@
 __pycache__
 .DS_Store
 imgui.ini
-*.png
-*.jpg
+/data
