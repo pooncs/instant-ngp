@@ -25,6 +25,7 @@ from scenes import *
 
 from tqdm import tqdm
 from plyfile import PlyData, PlyElement
+from scipy.spatial.transform import Rotation
 
 import pyngp as ngp # noqa
 
@@ -70,6 +71,7 @@ def parse_args():
 
 	parser.add_argument("--sharpen", default=0, help="Set amount of sharpening applied to NeRF training images. Range 0.0 to 1.0.")
 	parser.add_argument("--depth", action="store_true", help="Render and save a depth image.")
+	parser.add_argument("--nadir", default="", help="Render and save a nadir image from base_cam.json")
 
 
 	return parser.parse_args()
@@ -125,6 +127,7 @@ if __name__ == "__main__":
 	#testbed.slice_plane_z = -1
 	testbed.autofocus_target = [0.500,0.500,0.500]
 	testbed.autofocus = True
+	testbed.fixed_res_factor = 1
 
 	if mode == ngp.TestbedMode.Sdf:
 		testbed.tonemap_curve = ngp.TonemapCurve.ACES
@@ -261,7 +264,7 @@ if __name__ == "__main__":
 		testbed.snap_to_pixel_centers = True
 		spp = 8
 
-		testbed.nerf.rendering_min_transmittance = 1e-4
+		testbed.nerf.rendering_min_transmittance = 0.1
 
 		testbed.fov_axis = 0
 		testbed.fov = ref_transforms["frames"][0]["camera_angle_x"] * 180 / np.pi
@@ -283,6 +286,9 @@ if __name__ == "__main__":
 								ref_fname = os.path.join(data_dir, p + ".exr")
 
 				ref_image = read_image(ref_fname)
+				if ref_image.shape[2] == 3:
+					alpha = np.full((ref_image.shape[0], ref_image.shape[1]), 1, dtype=np.uint8)
+					ref_image = np.dstack((ref_image, alpha))
 
 				# NeRF blends with background colors in sRGB space, rather than first
 				# transforming to linear space, blending there, and then converting back.
@@ -307,7 +313,7 @@ if __name__ == "__main__":
 				if i == 0:
 					write_image("out.png", image)
 
-				diffimg = np.absolute(image[...,:3] - ref_image)
+				diffimg = np.absolute(image - ref_image)
 				diffimg[...,3:4] = 1.0
 				if i == 0:
 					write_image("diff.png", diffimg)
@@ -381,9 +387,13 @@ if __name__ == "__main__":
 			#image = testbed.render(args.width or int(ref_transforms["frames"][0]["w"]), args.height or int(ref_transforms["frames"][0]["h"]), args.screenshot_spp, True)
 			
 			ref_image = read_image(os.path.join(os.path.split(args.screenshot_transforms)[0], f["file_path"]))
+			if ref_image.shape[2] == 3:
+					alpha = np.full((ref_image.shape[0], ref_image.shape[1]), 1, dtype=np.uint8)
+					ref_image = np.dstack((ref_image, alpha))
+
 			image = testbed.render(ref_image.shape[1], ref_image.shape[0], args.screenshot_spp, True)
 			
-			diffimg = np.absolute(image[...,:3] - ref_image)
+			diffimg = np.absolute(image - ref_image)
 			diffimg[...,3:4] = 1.0
 			A = np.clip(linear_to_srgb(image[...,:3]), 0.0, 1.0)
 			R = np.clip(linear_to_srgb(ref_image[...,:3]), 0.0, 1.0)
@@ -409,6 +419,38 @@ if __name__ == "__main__":
 				gray = cv2.cvtColor(imaged, cv2.COLOR_BGR2GRAY) * 255
 				gray = cv2.equalizeHist(np.uint8(gray))
 				plt.imsave(outname,gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=255)
+				
+		if args.nadir:
+			with open(args.nadir) as f:
+				nadir = json.load(f)
+
+			testbed.render_mode = ngp.Depth
+			outname = outname[:pos]+"_nadir"+outname[pos:]
+			testbed.fov_axis = 0
+			testbed.fov = nadir['path'][0]['fov']
+			qvec = np.array(tuple(map(float, nadir['path'][0]['R'])))
+			tvec = np.array(tuple(map(float, nadir['path'][0]['T'])))
+			
+			rm = Rotation.from_quat(qvec)
+			mat_q = np.array(rm.as_matrix())
+			mat_t = np.array(tvec - 0.025).reshape((3, 1))
+			mat = np.hstack((mat_q, mat_t))
+
+			mat = mat[[2, 0, 1], :]
+			mat[:, 3] -= [0.5, 0.5, 0.5]
+			mat[:, 3] /= testbed.scale
+			mat[:, 2] *= -1
+			mat[:, 1] *= -1
+
+			bottom = np.array([0, 0, 0, 1])
+			xf = np.vstack((mat, bottom))
+			testbed.set_nerf_camera_matrix(np.matrix(xf)[:-1,:])
+			print(f"rendering {outname}")
+			image_nadir = testbed.render(ref_image.shape[1], ref_image.shape[0], args.screenshot_spp, True)
+			
+			gray = cv2.cvtColor(image_nadir, cv2.COLOR_BGR2GRAY) * 255
+			gray = cv2.equalizeHist(np.uint8(gray))
+			plt.imsave(outname,gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=255)
 
 	elif args.screenshot_dir:
 		outname = os.path.join(args.screenshot_dir, args.scene + "_" + network_stem)
