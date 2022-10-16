@@ -22,9 +22,9 @@
 	},
 	"encoding": {
 		"otype": "HashGrid",
-		"n_levels": 24,
+		"n_levels": 16,
 		"n_features_per_level": 8,
-		"log2_hashmap_size": 19,
+		"log2_hashmap_size": 22,
 		"base_resolution": 16
 	},
 	"network": {
@@ -40,7 +40,7 @@
 			{
 				"n_dims_to_encode": 3,
 				"otype": "SphericalHarmonics",
-				"degree": 8
+				"degree": 4
 			},
 			{
 				"otype": "Identity",

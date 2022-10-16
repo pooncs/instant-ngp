@@ -1,8 +1,8 @@
 basep=./data/nerf/shuttle4
 savep=/testcase/
-caseN=11
+caseN=12
 configN=base
-tsteps=35000
+tsteps=50000
 
 if [[ -d $basep$savep$caseN ]]
 then
@@ -23,7 +23,7 @@ then
             --screenshot_transforms $basep/transforms.json \
             --screenshot_frames 7 \
             --screenshot_dir $basep$savep$caseN/ \
-            --nadir $basep/jsons/nadir.json \
+            --nadir $basep/jsons/nadir3.json \
             --screenshot_spp 64 \
             |& tee $basep$savep$caseN/$configN-$tsteps-tlog.txt
 fi
@@ -38,7 +38,7 @@ then
             --screenshot_transforms $basep/transforms.json \
             --screenshot_frames 7 \
             --screenshot_dir $basep$savep$caseN/ \
-            --nadir $basep/jsons/nadir.json \
+            --nadir $basep/jsons/nadir3.json \
             --screenshot_spp 64 \
             |& tee $basep$savep$caseN/$configN-$tsteps-rlog.txt
 fi

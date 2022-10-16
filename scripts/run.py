@@ -264,7 +264,7 @@ if __name__ == "__main__":
 		testbed.snap_to_pixel_centers = True
 		spp = 8
 
-		testbed.nerf.rendering_min_transmittance = 0.1
+		testbed.nerf.rendering_min_transmittance = 0.5
 
 		testbed.fov_axis = 0
 		testbed.fov = ref_transforms["frames"][0]["camera_angle_x"] * 180 / np.pi
@@ -418,15 +418,12 @@ if __name__ == "__main__":
 				#Scale the depth image and print it in better colormap
 				gray = cv2.cvtColor(imaged, cv2.COLOR_BGR2GRAY) * 255
 				gray = cv2.equalizeHist(np.uint8(gray))
-				#plt.imsave(outname,gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=255)
-				plt.imsave(outname,gray, cmap=plt.get_cmap('cool'), vmin=0, vmax=255)
+				plt.imsave(outname,gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=255)
 				
 		if args.nadir:
 			with open(args.nadir) as f:
 				nadir = json.load(f)
 
-			testbed.render_mode = ngp.Depth
-			outname = outname[:pos]+"_nadir"+outname[pos:]
 			testbed.fov_axis = 0
 			testbed.fov = nadir['path'][0]['fov']
 			qvec = np.array(tuple(map(float, nadir['path'][0]['R'])))
@@ -446,13 +443,19 @@ if __name__ == "__main__":
 			bottom = np.array([0, 0, 0, 1])
 			xf = np.vstack((mat, bottom))
 			testbed.set_nerf_camera_matrix(np.matrix(xf)[:-1,:])
+
+			outname = outname[:pos]+"_nadir"+outname[pos:]
 			print(f"rendering {outname}")
 			image_nadir = testbed.render(ref_image.shape[1], ref_image.shape[0], args.screenshot_spp, True)
-			
-			gray = cv2.cvtColor(image_nadir, cv2.COLOR_BGR2GRAY) * 255
+			os.makedirs(os.path.dirname(outname), exist_ok=True)
+			write_image(outname, image_nadir)
+
+			outname = outname[:pos]+"_nadirDepth"+outname[pos:]
+			testbed.render_mode = ngp.Depth
+			image_nadir_depth = testbed.render(ref_image.shape[1], ref_image.shape[0], args.screenshot_spp, True)
+			gray = cv2.cvtColor(image_nadir_depth, cv2.COLOR_BGR2GRAY) * 255
 			gray = cv2.equalizeHist(np.uint8(gray))
-			#plt.imsave(outname,gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=255)
-			plt.imsave(outname,gray, cmap=plt.get_cmap('cool'), vmin=0, vmax=255)
+			plt.imsave(outname,gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=255)
 
 	elif args.screenshot_dir:
 		outname = os.path.join(args.screenshot_dir, args.scene + "_" + network_stem)
