@@ -418,7 +418,8 @@ if __name__ == "__main__":
 				#Scale the depth image and print it in better colormap
 				gray = cv2.cvtColor(imaged, cv2.COLOR_BGR2GRAY) * 255
 				gray = cv2.equalizeHist(np.uint8(gray))
-				plt.imsave(outname,gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=255)
+				#plt.imsave(outname,gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=255)
+				plt.imsave(outname,gray, cmap=plt.get_cmap('cool'), vmin=0, vmax=255)
 				
 		if args.nadir:
 			with open(args.nadir) as f:
@@ -450,7 +451,8 @@ if __name__ == "__main__":
 			
 			gray = cv2.cvtColor(image_nadir, cv2.COLOR_BGR2GRAY) * 255
 			gray = cv2.equalizeHist(np.uint8(gray))
-			plt.imsave(outname,gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=255)
+			#plt.imsave(outname,gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=255)
+			plt.imsave(outname,gray, cmap=plt.get_cmap('cool'), vmin=0, vmax=255)
 
 	elif args.screenshot_dir:
 		outname = os.path.join(args.screenshot_dir, args.scene + "_" + network_stem)

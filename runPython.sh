@@ -1,6 +1,6 @@
-basep=./data/nerf/toyota4
+basep=./data/nerf/shuttle4
 savep=/testcase/
-caseN=7
+caseN=11
 configN=base
 tsteps=35000
 
@@ -21,7 +21,7 @@ then
             --network $configN.json \
             --save_snapshot $basep$savep$caseN/$configN-$tsteps.msgpack \
             --screenshot_transforms $basep/transforms.json \
-            --screenshot_frames 4 \
+            --screenshot_frames 7 \
             --screenshot_dir $basep$savep$caseN/ \
             --nadir $basep/jsons/nadir.json \
             --screenshot_spp 64 \
@@ -36,7 +36,7 @@ then
             --network $configN.json \
             --load_snapshot $basep$savep$caseN/$configN-$tsteps.msgpack \
             --screenshot_transforms $basep/transforms.json \
-            --screenshot_frames 4 \
+            --screenshot_frames 7 \
             --screenshot_dir $basep$savep$caseN/ \
             --nadir $basep/jsons/nadir.json \
             --screenshot_spp 64 \
