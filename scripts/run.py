@@ -263,9 +263,8 @@ if __name__ == "__main__":
 		# So snap all pixels to the pixel centers.
 		testbed.snap_to_pixel_centers = True
 		spp = 8
-
+    
 		testbed.nerf.rendering_min_transmittance = 0.5
-
 		testbed.fov_axis = 0
 		testbed.fov = ref_transforms["frames"][0]["camera_angle_x"] * 180 / np.pi
 		testbed.shall_train = False
