@@ -261,7 +261,7 @@ if __name__ == "__main__":
 		testbed.snap_to_pixel_centers = True
 		spp = 8
 
-		testbed.nerf.rendering_min_transmittance = 1e-4
+		testbed.nerf.render_min_transmittance = 1e-4
 
 		testbed.fov_axis = 0
 		testbed.fov = ref_transforms["frames"][0]["camera_angle_x"] * 180 / np.pi
