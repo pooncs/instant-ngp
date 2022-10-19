@@ -154,17 +154,18 @@ if __name__ == "__main__":
 			snapshot = default_snapshot_filename(scenes[snapshot])
 		print("Loading snapshot ", snapshot)
 		testbed.load_snapshot(snapshot)
+		network_stem = os.path.splitext(os.path.basename(snapshot))[0]
 	else:
 		testbed.reload_network_from_file(network)
+		network_stem = os.path.splitext(os.path.basename(network))[0]
 
 	ref_transforms = {}
 	if args.screenshot_transforms: # try to load the given file straight away
 		print("Screenshot transforms from ", args.screenshot_transforms)
 		with open(args.screenshot_transforms) as f:
 			ref_transforms = json.load(f)
-	
-	print(f"aabb_scale: {ref_transforms['aabb_scale']}")
-	print(f"scale: {ref_transforms['scale']}")
+		print(f"aabb_scale: {ref_transforms['aabb_scale']}")
+		print(f"scale: {ref_transforms['scale']}")
 
 	testbed.shall_train = args.train if args.gui else True
 
@@ -173,7 +174,6 @@ if __name__ == "__main__":
 	testbed.nerf.render_with_lens_distortion = True
 	print(f"render_with_lens_distortion: {testbed.nerf.render_with_lens_distortion}")
 
-	network_stem = os.path.splitext(os.path.basename(network))[0]
 	if args.mode == "sdf":
 		setup_colored_sdf(testbed, args.scene)
 
@@ -390,7 +390,7 @@ if __name__ == "__main__":
 					alpha = np.full((ref_image.shape[0], ref_image.shape[1]), 1, dtype=np.uint8)
 					ref_image = np.dstack((ref_image, alpha))
 
-			image = testbed.render(ref_image.shape[1], ref_image.shape[0], args.screenshot_spp, True)
+			image = testbed.render(args.width or ref_image.shape[1], args.height or ref_image.shape[0], args.screenshot_spp, True)
 			
 			diffimg = np.absolute(image - ref_image)
 			diffimg[...,3:4] = 1.0
@@ -412,57 +412,64 @@ if __name__ == "__main__":
 				testbed.render_mode = ngp.Depth
 				print(f"rendering {outname}")
 				#imaged = testbed.render(args.width or int(ref_transforms["frames"][0]["w"]), args.height or int(ref_transforms["frames"][0]["h"]), args.screenshot_spp, True)
-				imaged = testbed.render(ref_image.shape[1], ref_image.shape[0], args.screenshot_spp, True)
+				imaged = testbed.render(args.width or ref_image.shape[1], args.height or ref_image.shape[0], args.screenshot_spp, True)
 
 				#Scale the depth image and print it in better colormap
 				gray = cv2.cvtColor(imaged, cv2.COLOR_BGR2GRAY) * 255
 				gray = cv2.equalizeHist(np.uint8(gray))
 				plt.imsave(outname,gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=255)
-				
-		if args.nadir:
-			with open(args.nadir) as f:
-				nadir = json.load(f)
-
-			testbed.fov_axis = 0
-			testbed.fov = nadir['path'][0]['fov']
-			qvec = np.array(tuple(map(float, nadir['path'][0]['R'])))
-			tvec = np.array(tuple(map(float, nadir['path'][0]['T'])))
-			
-			rm = Rotation.from_quat(qvec)
-			mat_q = np.array(rm.as_matrix())
-			mat_t = np.array(tvec - 0.025).reshape((3, 1))
-			mat = np.hstack((mat_q, mat_t))
-
-			mat = mat[[2, 0, 1], :]
-			mat[:, 3] -= [0.5, 0.5, 0.5]
-			mat[:, 3] /= testbed.scale
-			mat[:, 2] *= -1
-			mat[:, 1] *= -1
-
-			bottom = np.array([0, 0, 0, 1])
-			xf = np.vstack((mat, bottom))
-			testbed.set_nerf_camera_matrix(np.matrix(xf)[:-1,:])
-
-			outname = outname[:pos]+"_nadir"+outname[pos:]
-			print(f"rendering {outname}")
-			image_nadir = testbed.render(ref_image.shape[1], ref_image.shape[0], args.screenshot_spp, True)
-			os.makedirs(os.path.dirname(outname), exist_ok=True)
-			write_image(outname, image_nadir)
-
-			outname = outname[:pos]+"_nadirDepth"+outname[pos:]
-			testbed.render_mode = ngp.Depth
-			image_nadir_depth = testbed.render(ref_image.shape[1], ref_image.shape[0], args.screenshot_spp, True)
-			gray = cv2.cvtColor(image_nadir_depth, cv2.COLOR_BGR2GRAY) * 255
-			gray = cv2.equalizeHist(np.uint8(gray))
-			plt.imsave(outname,gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=255)
-
-	elif args.screenshot_dir:
-		outname = os.path.join(args.screenshot_dir, args.scene + "_" + network_stem)
+	'''
+	elif args.screenshot_dir and not args.nadir:
+		outname = os.path.join(args.screenshot_dir, "default_" + network_stem)
 		print(f"Rendering {outname}.png")
 		image = testbed.render(args.width or 1920, args.height or 1080, args.screenshot_spp, True)
 		if os.path.dirname(outname) != "":
 			os.makedirs(os.path.dirname(outname), exist_ok=True)
 		write_image(outname + ".png", image)
+	'''
+	
+	if args.nadir:
+		with open(args.nadir) as f:
+			nadir = json.load(f)
+
+		testbed.fov_axis = 0
+		testbed.fov = nadir['path'][0]['fov']
+		qvec = np.array(tuple(map(float, nadir['path'][0]['R'])))
+		tvec = np.array(tuple(map(float, nadir['path'][0]['T'])))
+		
+		rm = Rotation.from_quat(qvec)
+		mat_q = np.array(rm.as_matrix())
+		mat_t = np.array(tvec - 0.025).reshape((3, 1))
+		mat = np.hstack((mat_q, mat_t))
+
+		mat = mat[[2, 0, 1], :]
+		mat[:, 3] -= [0.5, 0.5, 0.5]
+		mat[:, 3] /= testbed.scale
+		mat[:, 2] *= -1
+		mat[:, 1] *= -1
+
+		bottom = np.array([0, 0, 0, 1])
+		xf = np.vstack((mat, bottom))
+		testbed.set_nerf_camera_matrix(np.matrix(xf)[:-1,:])
+		nadir_stem = os.path.splitext(os.path.basename(args.nadir))[0]
+		outname = os.path.join(args.screenshot_dir, f"{nadir_stem}_{network_stem}_rgb.jpg")
+		print(f"rendering {outname}")
+		image_nadir = testbed.render(args.width or 1920, args.height or 1080, args.screenshot_spp, True)
+		os.makedirs(os.path.dirname(outname), exist_ok=True)
+		write_image(outname, image_nadir)
+
+		outname = os.path.join(args.screenshot_dir, f"{nadir_stem}_{network_stem}_depthRaw.tiff")
+		testbed.render_mode = ngp.Depth
+		print(f"rendering {outname}")
+		image_nadir_depth = testbed.render(args.width or 1920, args.height or 1080, args.screenshot_spp, True)
+		os.makedirs(os.path.dirname(outname), exist_ok=True)
+		#image_nadir_depth = (image_nadir_depth-0.5)*255
+		write_image(outname, image_nadir_depth)
+		gray = cv2.cvtColor(image_nadir_depth, cv2.COLOR_BGR2GRAY) * 255
+		gray = cv2.equalizeHist(np.uint8(gray))
+		outname = os.path.join(args.screenshot_dir, f"{nadir_stem}_{network_stem}_depth.jpg")
+		print(f"Saving {outname}")
+		plt.imsave(outname, gray, cmap=plt.get_cmap('plasma'), vmin=0, vmax=255)
 
 	if args.video_camera_path:
 		testbed.load_camera_path(args.video_camera_path)

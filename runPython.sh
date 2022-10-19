@@ -1,6 +1,6 @@
 basep=./data/nerf/shuttle4
 savep=/testcase/
-caseN=12
+caseN=13
 configN=base
 tsteps=50000
 
@@ -20,10 +20,8 @@ then
             --n_steps $tsteps \
             --network $configN.json \
             --save_snapshot $basep$savep$caseN/$configN-$tsteps.msgpack \
-            --screenshot_transforms $basep/transforms.json \
-            --screenshot_frames 7 \
             --screenshot_dir $basep$savep$caseN/ \
-            --nadir $basep/jsons/nadir3.json \
+            --nadir $basep/jsons/nadir4.json \
             --screenshot_spp 64 \
             |& tee $basep$savep$caseN/$configN-$tsteps-tlog.txt
 fi
