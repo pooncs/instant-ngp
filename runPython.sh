@@ -1,8 +1,8 @@
-basep=./data/nerf/toyota4
+basep=./data/nerf/shuttle4
 savep=/testcase/
-caseN=6
-configN=customAll
-tsteps=35000
+caseN=12
+configN=base
+tsteps=50000
 
 if [[ -d $basep$savep$caseN ]]
 then
@@ -15,15 +15,16 @@ if [ $1 == "t" ]
 then
     echo "Training data"
     
-    python3 ./scripts/run.py --mode nerf \
+    nohup python3 ./scripts/run.py --mode nerf \
             --scene $basep \
             --n_steps $tsteps \
             --network $configN.json \
             --save_snapshot $basep$savep$caseN/$configN-$tsteps.msgpack \
             --screenshot_transforms $basep/transforms.json \
-            --screenshot_frames 4 \
+            --screenshot_frames 7 \
             --screenshot_dir $basep$savep$caseN/ \
-            --depth \
+            --nadir $basep/jsons/nadir3.json \
+            --screenshot_spp 64 \
             |& tee $basep$savep$caseN/$configN-$tsteps-tlog.txt
 fi
 
@@ -35,8 +36,9 @@ then
             --network $configN.json \
             --load_snapshot $basep$savep$caseN/$configN-$tsteps.msgpack \
             --screenshot_transforms $basep/transforms.json \
-            --screenshot_frames 4 \
+            --screenshot_frames 7 \
             --screenshot_dir $basep$savep$caseN/ \
-            --depth \
+            --nadir $basep/jsons/nadir3.json \
+            --screenshot_spp 64 \
             |& tee $basep$savep$caseN/$configN-$tsteps-rlog.txt
 fi
