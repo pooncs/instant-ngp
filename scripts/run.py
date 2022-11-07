@@ -370,14 +370,12 @@ if __name__ == "__main__":
 		for idx in args.screenshot_frames:
 			f = ref_transforms["frames"][int(idx)]
 			cam_matrix = f["transform_matrix"]
-			testbed.set_nerf_camera_matrix(np.matrix(cam_matrix)[:-1,:])
-			outname = os.path.join(args.screenshot_dir, os.path.basename(f["file_path"]))			
+			testbed.set_nerf_camera_matrix(np.matrix(cam_matrix)[:-1,:])		
 
 			#Add configuration to the screenshot filename
-			pos = outname.index('.',1)
-			ss = "_"+snapshot.split('.')[1].split('/')[-1]
-			outname = outname[:pos]+ss+outname[pos:]
-   
+			img_stem = os.path.splitext(os.path.basename(f["file_path"]))[0]
+			outname = os.path.join(args.screenshot_dir, f"{img_stem}_{network_stem}_rgb.jpg")
+
 			# Some NeRF datasets lack the .png suffix in the dataset metadata
 			if not os.path.splitext(outname)[1]:
 				outname = outname + ".png"
@@ -387,19 +385,20 @@ if __name__ == "__main__":
 			
 			ref_image = read_image(os.path.join(os.path.split(args.screenshot_transforms)[0], f["file_path"]))
 			if ref_image.shape[2] == 3:
-					alpha = np.full((ref_image.shape[0], ref_image.shape[1]), 1, dtype=np.uint8)
-					ref_image = np.dstack((ref_image, alpha))
+				alpha = np.full((ref_image.shape[0], ref_image.shape[1]), 1, dtype=np.uint8)
+				ref_image = np.dstack((ref_image, alpha))
 
 			image = testbed.render(args.width or ref_image.shape[1], args.height or ref_image.shape[0], args.screenshot_spp, True)
 			
-			diffimg = np.absolute(image - ref_image)
-			diffimg[...,3:4] = 1.0
-			A = np.clip(linear_to_srgb(image[...,:3]), 0.0, 1.0)
-			R = np.clip(linear_to_srgb(ref_image[...,:3]), 0.0, 1.0)
-			mse = float(compute_error("MSE", A, R))
-			ssim = float(compute_error("SSIM", A, R))
-			psnr = mse2psnr(mse)
-			print(f"{outname}: mse: {mse}, ssim: {ssim}, psnr: {psnr}")
+			if len(image) == ref_image.shape[0]:
+				diffimg = np.absolute(image - ref_image)
+				diffimg[...,3:4] = 1.0
+				A = np.clip(linear_to_srgb(image[...,:3]), 0.0, 1.0)
+				R = np.clip(linear_to_srgb(ref_image[...,:3]), 0.0, 1.0)
+				mse = float(compute_error("MSE", A, R))
+				ssim = float(compute_error("SSIM", A, R))
+				psnr = mse2psnr(mse)
+				print(f"{outname}: mse: {mse}, ssim: {ssim}, psnr: {psnr}")
 			
 			os.makedirs(os.path.dirname(outname), exist_ok=True)
 			write_image(outname, image)
@@ -407,8 +406,7 @@ if __name__ == "__main__":
 			
 			if args.depth:
 				print("saving depth screenshots")
-				pos = outname.index('.',1)
-				outname = outname[:pos]+"_depth"+outname[pos:]
+				outname = os.path.join(args.screenshot_dir, f"{img_stem}_{network_stem}_depth.jpg")
 				testbed.render_mode = ngp.Depth
 				print(f"rendering {outname}")
 				#imaged = testbed.render(args.width or int(ref_transforms["frames"][0]["w"]), args.height or int(ref_transforms["frames"][0]["h"]), args.screenshot_spp, True)
@@ -436,10 +434,9 @@ if __name__ == "__main__":
 		testbed.fov = nadir['path'][0]['fov']
 		qvec = np.array(tuple(map(float, nadir['path'][0]['R'])))
 		tvec = np.array(tuple(map(float, nadir['path'][0]['T'])))
-		
 		rm = Rotation.from_quat(qvec)
 		mat_q = np.array(rm.as_matrix())
-		mat_t = np.array(tvec - 0.025).reshape((3, 1))
+		mat_t = np.array(tvec).reshape((3, 1))
 		mat = np.hstack((mat_q, mat_t))
 
 		mat = mat[[2, 0, 1], :]
@@ -447,17 +444,22 @@ if __name__ == "__main__":
 		mat[:, 3] /= testbed.scale
 		mat[:, 2] *= -1
 		mat[:, 1] *= -1
+		mat[2, 3] = 100 # For ENU with aabb. Coordinates here are in meters
 
-		bottom = np.array([0, 0, 0, 1])
-		xf = np.vstack((mat, bottom))
-		testbed.set_nerf_camera_matrix(np.matrix(xf)[:-1,:])
+		#testbed.up_dir = [0.000,1.000,0.000]
+		#testbed.view_dir = [0.000,-1.000,0.000]
+		#testbed.look_at = [0.500,2.000,0.500]
+		#bottom = np.array([0, 0, 0, 1])
+		#xf = np.vstack((mat, bottom))
+		testbed.set_nerf_camera_matrix(mat)
+		#testbed.fov = 200
 		nadir_stem = os.path.splitext(os.path.basename(args.nadir))[0]
 		outname = os.path.join(args.screenshot_dir, f"{nadir_stem}_{network_stem}_rgb.jpg")
 		print(f"rendering {outname}")
 		image_nadir = testbed.render(args.width or 1920, args.height or 1080, args.screenshot_spp, True)
 		os.makedirs(os.path.dirname(outname), exist_ok=True)
 		write_image(outname, image_nadir)
-
+		
 		outname = os.path.join(args.screenshot_dir, f"{nadir_stem}_{network_stem}_depthRaw.tiff")
 		testbed.render_mode = ngp.Depth
 		print(f"rendering {outname}")
@@ -470,6 +472,7 @@ if __name__ == "__main__":
 		outname = os.path.join(args.screenshot_dir, f"{nadir_stem}_{network_stem}_depth.jpg")
 		print(f"Saving {outname}")
 		plt.imsave(outname, gray, cmap=plt.get_cmap('plasma'), vmin=0, vmax=255)
+		
 
 	if args.video_camera_path:
 		testbed.load_camera_path(args.video_camera_path)
