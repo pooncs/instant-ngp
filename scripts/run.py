@@ -467,11 +467,19 @@ if __name__ == "__main__":
 		os.makedirs(os.path.dirname(outname), exist_ok=True)
 		#image_nadir_depth = (image_nadir_depth-0.5)*255
 		write_image(outname, image_nadir_depth)
-		gray = cv2.cvtColor(image_nadir_depth, cv2.COLOR_BGR2GRAY) * 255
-		gray = cv2.equalizeHist(np.uint8(gray))
+		gray = cv2.cvtColor(image_nadir_depth, cv2.COLOR_BGR2GRAY)
+		gray = 1/gray
+		pLo, pHi = np.percentile(gray, [0.01, 0.5])
+		#gray -= np.min(gray)
+		#gray /= np.max(gray)
+		gray -= pLo
+		gray /= pHi
+		gray *= 255
+		print(f"Scaling between {pLo} and {pHi}")
+		#gray = cv2.equalizeHist(np.uint8(gray))
 		outname = os.path.join(args.screenshot_dir, f"{nadir_stem}_{network_stem}_depth.jpg")
 		print(f"Saving {outname}")
-		plt.imsave(outname, gray, cmap=plt.get_cmap('plasma'), vmin=0, vmax=255)
+		plt.imsave(outname, gray, cmap=plt.get_cmap('plasma'), vmin=0, vmax=128)
 		
 
 	if args.video_camera_path:
