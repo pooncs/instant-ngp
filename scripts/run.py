@@ -169,7 +169,7 @@ if __name__ == "__main__":
 
 	testbed.shall_train = args.train if args.gui else True
 
-	testbed.nerf.cone_angle_constant = 0
+	testbed.nerf.cone_angle_constant = 0.000
 	print(f"cone_angle_constant: {testbed.nerf.cone_angle_constant}")
 	testbed.nerf.render_with_lens_distortion = True
 	print(f"render_with_lens_distortion: {testbed.nerf.render_with_lens_distortion}")
@@ -264,7 +264,7 @@ if __name__ == "__main__":
 		testbed.snap_to_pixel_centers = True
 		spp = 8
     
-		testbed.nerf.rendering_min_transmittance = 0.5
+		#testbed.nerf.rendering_min_transmittance = 0.5
 		testbed.fov_axis = 0
 		testbed.fov = ref_transforms["frames"][0]["camera_angle_x"] * 180 / np.pi
 		testbed.shall_train = False
@@ -444,8 +444,8 @@ if __name__ == "__main__":
 		mat[:, 3] /= testbed.scale
 		mat[:, 2] *= -1
 		mat[:, 1] *= -1
-		mat[2, 3] = 100 # For ENU with aabb. Coordinates here are in meters
-
+		enu_height = 2300
+		mat[2, 3] = enu_height # For ENU with aabb. Coordinates here are in meters
 		#testbed.up_dir = [0.000,1.000,0.000]
 		#testbed.view_dir = [0.000,-1.000,0.000]
 		#testbed.look_at = [0.500,2.000,0.500]
@@ -468,18 +468,21 @@ if __name__ == "__main__":
 		#image_nadir_depth = (image_nadir_depth-0.5)*255
 		write_image(outname, image_nadir_depth)
 		gray = cv2.cvtColor(image_nadir_depth, cv2.COLOR_BGR2GRAY)
-		gray = 1/gray
+		gray = enu_height-gray
+		gray -= np.min(gray)
+		'''gray = 1/gray
 		pLo, pHi = np.percentile(gray, [0.01, 0.5])
-		#gray -= np.min(gray)
-		#gray /= np.max(gray)
 		gray -= pLo
 		gray /= pHi
+		gray -= np.min(gray)
+		gray /= np.max(gray)
 		gray *= 255
-		print(f"Scaling between {pLo} and {pHi}")
-		#gray = cv2.equalizeHist(np.uint8(gray))
+		#print(f"Scaling between {pLo} and {pHi}")
+		gray = cv2.equalizeHist(np.uint8(gray))'''
 		outname = os.path.join(args.screenshot_dir, f"{nadir_stem}_{network_stem}_depth.jpg")
 		print(f"Saving {outname}")
-		plt.imsave(outname, gray, cmap=plt.get_cmap('plasma'), vmin=0, vmax=128)
+		plt.imsave(outname, gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=100)
+
 		
 
 	if args.video_camera_path:

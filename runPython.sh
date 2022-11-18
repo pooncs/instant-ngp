@@ -1,6 +1,6 @@
 basep=../data/nerf/shuttle_ll
 savep=/testcase/
-caseN=15
+caseN=16
 configN=base
 tsteps=30000
 
