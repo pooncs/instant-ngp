@@ -83,6 +83,21 @@ def generateSphericalTestPoses(data_dir: str, numberOfFrames: int):
 
 	return camtoworlds, K, ax, ay
 
+def nerf_to_ngp(xf, scale):
+    mat = np.copy(xf)
+    mat = mat[:-1,:]
+    mat[:,1] *= -1 # flip axis
+    mat[:,2] *= -1
+    mat[:,3] *= scale #scale
+    mat[:,3] -= [0.5, 0.5, 0.5] #offset
+	
+    mat = mat[[1,2,0], :] # swap axis
+    
+    rm = Rotation.from_matrix(mat[:,:3]) 
+    
+    # quaternion (x, y, z, w) and translation
+    return rm.as_quat(), mat[:,3] + 0.025
+
 def parse_args():
 	parser = argparse.ArgumentParser(description="Run neural graphics primitives testbed with additional configuration & output options")
 
@@ -540,49 +555,39 @@ if __name__ == "__main__":
 
 	if args.video_camera_path or args.spherical:
 		if args.spherical:
-			sposes, K, ax, _ = generateSphericalTestPoses(args.scene, 15)
-			fov = ax * 180 / np.pi
+			c2w, K, angle_x, _ = generateSphericalTestPoses(args.scene, 12)
+			fov = angle_x * 180 / np.pi
 			testbed.fov = fov
 
-			out = {"path":[], "time":1.0}
-
-			for i, xf in enumerate(sposes):
-				mat = np.copy(xf)
-				mat = mat[:-1,:] 
-				mat[:,1] *= -1 #flip axis
-				mat[:,2] *= -1
-				mat[:,3] += [0.5,0.5,0.5] # translation and re-scale
-				mat = mat[[1,2,0],:]
-				mat[:,3] += 0.025
-				mat[0,3] *= -1
-				rm = Rotation.from_matrix(mat[:,:3]) 
-				q = rm.as_quat()
-				t = mat[:,3]
-
-				q[1:3] *= -1
+			out = {"path":[], "time":1.0}    
+			for x in c2w:
+				fov = (angle_x * 180 / np.pi)/2
+				q, t = nerf_to_ngp(x, 0.05)
 				
 				out['path'].append({
 					"R": list(q),
 					"T": list(t),
-					"dof":0.0,
+					"aperture_size":0.0,
 					"fov":fov,
+					"glow_mode":0,
+					"glow_y_cutoff":0.0,
 					"scale":1,
 					"slice":0.0
 				})
 
-				testbed.set_nerf_camera_matrix(mat)
-				testbed.render_mode = ngp.Shade
-				outname = os.path.join(args.screenshot_dir, f"s{i}.jpg")
-				print(f"rendering {outname}")
-				test = testbed.render(args.width or 1920, args.height or 1080, args.screenshot_spp, True)
-				write_image(outname, test)
+			testbed.set_nerf_camera_matrix(mat)
+			testbed.render_mode = ngp.Shade
+			outname = os.path.join(args.screenshot_dir, f"s{i}.jpg")
+			print(f"rendering {outname}")
+			test = testbed.render(args.width or 1920, args.height or 1080, args.screenshot_spp, True)
+			write_image(outname, test)
 
 			outname = os.path.join(args.screenshot_dir, "base_cam.json")
 			with open(outname, "w") as outname:
 				json.dump(out, outname, indent=2)
 			args.video_camera_path = outname
 		else:
-			args.video_camera_path = '/home/ubuntu/ws/data/nerf/shuttle_ll/base_cam.json'
+			args.video_camera_path = os.path.join(args.scene, 'base_cam.json')
 			testbed.load_camera_path(args.video_camera_path)
 
 		testbed.loop_animation = args.video_loop_animation
@@ -600,4 +605,17 @@ if __name__ == "__main__":
 			write_image(f"tmp/{i:04d}.jpg", np.clip(frame * 2**args.exposure, 0.0, 1.0), quality=100)
 
 		os.system(f"ffmpeg -y -framerate {args.video_fps} -i tmp/%04d.jpg -c:v libx264 -pix_fmt yuv420p {args.video_output}")
+		#shutil.rmtree("tmp")
+
+		testbed.render_mode = ngp.Depth
+		for i in tqdm(list(range(min(n_frames, n_frames+1))), unit="frames", desc=f"Rendering video"):
+			testbed.camera_smoothing = args.video_camera_smoothing
+			frame = testbed.render(resolution[0], resolution[1], args.video_spp, True, float(i)/n_frames, float(i + 1)/n_frames, args.video_fps, shutter_fraction=0.5)
+			gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+			gray = 1.4-gray
+			gray -= np.min(gray)
+			gray[gray>150] = 0
+			plt.imsave(f"tmp/{i:04d}.jpg", gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=150)
+
+		os.system(f"ffmpeg -y -framerate {args.video_fps} -i tmp/%04d.jpg -c:v libx264 -pix_fmt yuv420p {'d_'+args.video_output}")
 		shutil.rmtree("tmp")

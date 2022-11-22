@@ -19,7 +19,7 @@ def nerf_to_ngp(xf):
 
 def smooth_camera_path(path_to_transforms, ):
     out = {"path":[], "time":1.0}
-    with open(path_to_transforms + '/transforms.json') as f:
+    with open(path_to_transforms + '/bct.json') as f:
         data = json.load(f)
     
     n_frames = len(data['frames'])
@@ -40,12 +40,12 @@ def smooth_camera_path(path_to_transforms, ):
             "R": list(q),
             "T": list(t),
             "dof":0.0,
-            "fov":43,
+            "fov":7.75,
             "scale":0,
             "slice":0.0
         })
         
-    with open(path_to_transforms+'/base_cam.json', "w") as outfile:
+    with open(path_to_transforms+'/bct2.json', "w") as outfile:
         json.dump(out, outfile, indent=2)
         
-smooth_camera_path('/home/ubuntu/instant-ngp/data/nerf/fox')
+smooth_camera_path('/home/ubuntu/ws/data/nerf/shuttle_ll')
