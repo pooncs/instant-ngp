@@ -29,6 +29,60 @@ from scipy.spatial.transform import Rotation
 
 import pyngp as ngp # noqa
 
+def sphericalPoses(p0,numberOfFrames):
+	"""
+	We first move the camera to [0,0,tz] in the world coordinate space. 
+	Then we rotate the camera pos 45 degrees wrt X axis.
+	Finally we rotate the camera wrt Z axis numberOfFrames times.
+	Note: Camera space and world space (ENU) is actually aligned 
+		X_c == X_w or E (east)
+		Y_c == Y_w or N (north)
+		Z_c == Z_w or U (up)
+		Camera is positioned at [0,0,tz] it is actually looking down to -Z direction 
+	"""
+	transMat = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,1750],[0,0,0,1]]).astype(float) #move camera to 0,0,1500
+	
+	#rotate camera 45 degrees wrt X axis
+	rotMatX = np.identity(4)
+	rotMatX[0:3,0:3] = Rotation.from_euler('X',np.pi/4).as_matrix()
+	
+	#first translate then rotate
+	transMat = rotMatX @ transMat
+	
+	poses = []
+	for angle in np.linspace(0,2*np.pi,numberOfFrames):
+
+		rotMatZ = np.identity(4)
+		rotMatZ[0:3,0:3] = Rotation.from_euler('Z',angle).as_matrix()
+
+		myPose = rotMatZ @ transMat
+		poses.append(myPose)
+
+	poses = np.stack(poses, axis=0)
+	return poses
+
+def generateSphericalTestPoses(data_dir: str, numberOfFrames: int):
+	with open(os.path.join(data_dir, 'transforms.json'), 'r') as fp:
+		meta = json.load(fp)
+
+	frame = meta["frames"][15]
+	fname = os.path.join(data_dir, frame['file_path'][2:])
+
+	factor = 4
+	#image intrinsics
+	focal, cx, cy = frame['fl_x'], frame['cx'], frame['cy']
+	K = np.array([[focal, 0, cx], [0, focal, cy], [0, 0, 1]])
+	K[:2, :] /= factor
+	ax = frame['camera_angle_x']
+	ay = frame['camera_angle_y']
+
+	w, h = frame['w']/factor, frame['h']/factor
+
+	c2w = np.array(frame["transform_matrix"])
+	camtoworlds = sphericalPoses(c2w, numberOfFrames)
+
+	return camtoworlds, K, ax, ay
+
 def parse_args():
 	parser = argparse.ArgumentParser(description="Run neural graphics primitives testbed with additional configuration & output options")
 
@@ -72,6 +126,7 @@ def parse_args():
 	parser.add_argument("--sharpen", default=0, help="Set amount of sharpening applied to NeRF training images. Range 0.0 to 1.0.")
 	parser.add_argument("--depth", action="store_true", help="Render and save a depth image.")
 	parser.add_argument("--nadir", default="", help="Render and save a nadir image from base_cam.json")
+	parser.add_argument("--spherical", action="store_true", help="Create spherical video")
 
 
 	return parser.parse_args()
@@ -483,10 +538,53 @@ if __name__ == "__main__":
 		print(f"Saving {outname}")
 		plt.imsave(outname, gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=100)
 
-		
+	if args.video_camera_path or args.spherical:
+		if args.spherical:
+			sposes, K, ax, _ = generateSphericalTestPoses(args.scene, 15)
+			fov = ax * 180 / np.pi
+			testbed.fov = fov
 
-	if args.video_camera_path:
-		testbed.load_camera_path(args.video_camera_path)
+			out = {"path":[], "time":1.0}
+
+			for i, xf in enumerate(sposes):
+				mat = np.copy(xf)
+				mat = mat[:-1,:] 
+				mat[:,1] *= -1 #flip axis
+				mat[:,2] *= -1
+				mat[:,3] += [0.5,0.5,0.5] # translation and re-scale
+				mat = mat[[1,2,0],:]
+				mat[:,3] += 0.025
+				mat[0,3] *= -1
+				rm = Rotation.from_matrix(mat[:,:3]) 
+				q = rm.as_quat()
+				t = mat[:,3]
+
+				q[1:3] *= -1
+				
+				out['path'].append({
+					"R": list(q),
+					"T": list(t),
+					"dof":0.0,
+					"fov":fov,
+					"scale":1,
+					"slice":0.0
+				})
+
+				testbed.set_nerf_camera_matrix(mat)
+				testbed.render_mode = ngp.Shade
+				outname = os.path.join(args.screenshot_dir, f"s{i}.jpg")
+				print(f"rendering {outname}")
+				test = testbed.render(args.width or 1920, args.height or 1080, args.screenshot_spp, True)
+				write_image(outname, test)
+
+			outname = os.path.join(args.screenshot_dir, "base_cam.json")
+			with open(outname, "w") as outname:
+				json.dump(out, outname, indent=2)
+			args.video_camera_path = outname
+		else:
+			args.video_camera_path = '/home/ubuntu/ws/data/nerf/shuttle_ll/base_cam.json'
+			testbed.load_camera_path(args.video_camera_path)
+
 		testbed.loop_animation = args.video_loop_animation
 
 		resolution = [args.width or 1920, args.height or 1080]
