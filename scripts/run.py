@@ -236,6 +236,8 @@ if __name__ == "__main__":
 			ref_transforms = json.load(f)
 		print(f"aabb_scale: {ref_transforms['aabb_scale']}")
 		print(f"scale: {ref_transforms['scale']}")
+		enu_height = np.mean(np.array(
+			[frame["transform_matrix"] for frame in ref_transforms["frames"]])[:, 2, 3])
 
 	testbed.shall_train = args.train if args.gui else True
 
@@ -419,7 +421,6 @@ if __name__ == "__main__":
 		vertex_color = np.array(list(zip(*((mc["C"] * 255).T))), dtype=[('red', 'u1'), ('green', 'u1'), ('blue', 'u1')])
 		n = len(vertex)
 		assert len(vertex_color) == n
-
 		vertex_all = np.empty(n, vertex.dtype.descr + vertex_color.dtype.descr)
 
 		for prop in vertex.dtype.names:
@@ -483,9 +484,14 @@ if __name__ == "__main__":
 				imaged = testbed.render(args.width or ref_image.shape[1], args.height or ref_image.shape[0], args.screenshot_spp, True)
 
 				#Scale the depth image and print it in better colormap
+				imaged -= np.percentile(imaged, 5)
+				imaged /= np.percentile(imaged, 95)
 				gray = cv2.cvtColor(imaged, cv2.COLOR_BGR2GRAY) * 255
-				gray = cv2.equalizeHist(np.uint8(gray))
-				plt.imsave(outname,gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=255)
+				#gray = cv2.equalizeHist(np.uint8(gray))
+				#gray = cv2.cvtColor(imaged, cv2.COLOR_BGR2GRAY)
+				#gray = enu_height-gray
+				#gray -= np.min(gray)
+				plt.imsave(outname,gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=100)
 	'''
 	elif args.screenshot_dir and not args.nadir:
 		outname = os.path.join(args.screenshot_dir, "default_" + network_stem)
@@ -514,7 +520,7 @@ if __name__ == "__main__":
 		mat[:, 3] /= testbed.scale
 		mat[:, 2] *= -1
 		mat[:, 1] *= -1
-		enu_height = 2300
+		#enu_height = 2300
 		mat[2, 3] = enu_height # For ENU with aabb. Coordinates here are in meters
 		#testbed.up_dir = [0.000,1.000,0.000]
 		#testbed.view_dir = [0.000,-1.000,0.000]
@@ -540,15 +546,6 @@ if __name__ == "__main__":
 		gray = cv2.cvtColor(image_nadir_depth, cv2.COLOR_BGR2GRAY)
 		gray = enu_height-gray
 		gray -= np.min(gray)
-		'''gray = 1/gray
-		pLo, pHi = np.percentile(gray, [0.01, 0.5])
-		gray -= pLo
-		gray /= pHi
-		gray -= np.min(gray)
-		gray /= np.max(gray)
-		gray *= 255
-		#print(f"Scaling between {pLo} and {pHi}")
-		gray = cv2.equalizeHist(np.uint8(gray))'''
 		outname = os.path.join(args.screenshot_dir, f"{nadir_stem}_{network_stem}_depth.jpg")
 		print(f"Saving {outname}")
 		plt.imsave(outname, gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=100)
@@ -556,6 +553,7 @@ if __name__ == "__main__":
 	if args.video_camera_path or args.spherical:
 		if args.spherical:
 			c2w, K, angle_x, _ = generateSphericalTestPoses(args.scene, 12)
+			enu_height = np.mean(c2w[:, 2, 3])
 			fov = angle_x * 180 / np.pi
 			testbed.fov = fov
 

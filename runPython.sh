@@ -1,6 +1,6 @@
-basep=../data/nerf/shuttle_ll
+basep=../data/nerf/shuttle8
 savep=/testcase/
-caseN=16
+caseN=17
 configN=base
 tsteps=30000
 
@@ -39,8 +39,7 @@ then
             --screenshot_frames 7 \
             --screenshot_dir $basep$savep$caseN/ \
             --nadir $basep/jsons/nadir5.json \
+            --depth \
             --screenshot_spp 64 \
-            --width 1024 \
-            --height 1024 \
             |& tee $basep$savep$caseN/$configN-$tsteps-rlog.txt
 fi

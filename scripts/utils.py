@@ -53,7 +53,7 @@ def ngp_to_nerf(xf):
 
 def nerf_to_ngp(xf):
     mat = np.copy(xf)
-    mat = mat[:-1,:] 
+    mat = mat[:-1,:] #4C, 4R
     mat[:,1] *= -1 #flip axis
     mat[:,2] *= -1
     mat[:,3] *= 0.33
