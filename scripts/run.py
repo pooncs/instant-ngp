@@ -141,7 +141,7 @@ def parse_args():
 	parser.add_argument("--sharpen", default=0, help="Set amount of sharpening applied to NeRF training images. Range 0.0 to 1.0.")
 	parser.add_argument("--depth", action="store_true", help="Render and save a depth image.")
 	parser.add_argument("--nadir", default="", help="Render and save a nadir image from base_cam.json")
-	parser.add_argument("--spherical", action="store_true", help="Create spherical video")
+	parser.add_argument("--spherical", default=0, help="Create spherical video with number of frames in a sphere")
 
 
 	return parser.parse_args()
@@ -245,6 +245,11 @@ if __name__ == "__main__":
 	print(f"cone_angle_constant: {testbed.nerf.cone_angle_constant}")
 	testbed.nerf.render_with_lens_distortion = True
 	print(f"render_with_lens_distortion: {testbed.nerf.render_with_lens_distortion}")
+
+	testbed.nerf.training.optimize_extrinsics = True
+	print(f"Train Extrinsics: {testbed.nerf.training.optimize_extrinsics}")
+	testbed.nerf.training.optimize_focal_length = False
+	print(f"Train Focal length: {testbed.nerf.training.optimize_focal_length}")
 
 	if args.mode == "sdf":
 		setup_colored_sdf(testbed, args.scene)
@@ -550,44 +555,39 @@ if __name__ == "__main__":
 		print(f"Saving {outname}")
 		plt.imsave(outname, gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=100)
 
-	if args.video_camera_path or args.spherical:
-		if args.spherical:
-			c2w, K, angle_x, _ = generateSphericalTestPoses(args.scene, 12)
-			enu_height = np.mean(c2w[:, 2, 3])
-			fov = angle_x * 180 / np.pi
-			testbed.fov = fov
+	if args.spherical:
+		c2w, K, angle_x, _ = generateSphericalTestPoses(args.scene, int(args.spherical))
+		enu_height = np.mean(c2w[:, 2, 3])
+		fov = angle_x * 180 / np.pi
+		testbed.fov = fov
+		image, image_depth = [], []
+		#Add configuration to the screenshot filename
+		outname = os.path.join(args.screenshot_dir, f"{network_stem}_rgb.mp4")
+		outname_d = os.path.join(args.screenshot_dir, f"{network_stem}_depth.mp4")
+		tmp = os.path.join(args.screenshot_dir, f"tmp.jpg")
+		print(f"rendering Spherical")
 
-			out = {"path":[], "time":1.0}    
-			for x in c2w:
-				fov = (angle_x * 180 / np.pi)/2
-				q, t = nerf_to_ngp(x, 0.05)
-				
-				out['path'].append({
-					"R": list(q),
-					"T": list(t),
-					"aperture_size":0.0,
-					"fov":fov,
-					"glow_mode":0,
-					"glow_y_cutoff":0.0,
-					"scale":1,
-					"slice":0.0
-				})
-
-			testbed.set_nerf_camera_matrix(mat)
+		for cam in tqdm(c2w):
 			testbed.render_mode = ngp.Shade
-			outname = os.path.join(args.screenshot_dir, f"s{i}.jpg")
-			print(f"rendering {outname}")
-			test = testbed.render(args.width or 1920, args.height or 1080, args.screenshot_spp, True)
-			write_image(outname, test)
+			testbed.set_nerf_camera_matrix(np.matrix(cam)[:-1,:])
+			image.append(np.uint8(testbed.render(args.width or 1920, args.height or 1080, args.screenshot_spp, True)*255))
+			testbed.render_mode = ngp.Depth
+			_image_depth = testbed.render(args.width or 1920, args.height or 1080, args.screenshot_spp, True)
+			enu_height = np.mean(c2w[:,2,3])
+			gray = cv2.cvtColor(_image_depth, cv2.COLOR_BGR2GRAY)
+			gray = enu_height-gray
+			gray -= np.min(gray)
+			plt.imsave(tmp, gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=200)
+			image_depth.append(imageio.imread(tmp))
 
-			outname = os.path.join(args.screenshot_dir, "base_cam.json")
-			with open(outname, "w") as outname:
-				json.dump(out, outname, indent=2)
-			args.video_camera_path = outname
-		else:
-			args.video_camera_path = os.path.join(args.scene, 'base_cam.json')
-			testbed.load_camera_path(args.video_camera_path)
+		os.remove(tmp)
+		os.makedirs(os.path.dirname(outname), exist_ok=True)
+		imageio.mimwrite(outname, image)
+		imageio.mimwrite(outname_d, image_depth)
 
+	if args.video_camera_path:
+		args.video_camera_path = os.path.join(args.scene, 'base_cam.json')
+		testbed.load_camera_path(args.video_camera_path)
 		testbed.loop_animation = args.video_loop_animation
 
 		resolution = [args.width or 1920, args.height or 1080]
