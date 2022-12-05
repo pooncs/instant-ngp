@@ -1,4 +1,4 @@
-basep=../data/nerf/shuttleTest4_ll2
+basep=../data/nerf/shuttleTest8
 savep=/testcase/
 caseN=18
 configN=base
