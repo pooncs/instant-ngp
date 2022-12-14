@@ -40,7 +40,9 @@ def sphericalPoses(p0,numberOfFrames):
 		Z_c == Z_w or U (up)
 		Camera is positioned at [0,0,tz] it is actually looking down to -Z direction 
 	"""
-	transMat = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,1750],[0,0,0,1]]).astype(float) #move camera to 0,0,1500
+	mean_height = np.linalg.norm(p0[:3, 3])
+	print(f"Norm height for spherical poses: {mean_height}")
+	transMat = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,mean_height],[0,0,0,1]]).astype(float) #move camera to 0,0,1500
 	
 	#rotate camera 45 degrees wrt X axis
 	rotMatX = np.identity(4)
@@ -61,22 +63,24 @@ def sphericalPoses(p0,numberOfFrames):
 	poses = np.stack(poses, axis=0)
 	return poses
 
-def generateSphericalTestPoses(data_dir: str, numberOfFrames: int):
+def generateSphericalTestPoses(data_dir: str, numberOfFrames: int, multi=True):
 	with open(os.path.join(data_dir, 'transforms.json'), 'r') as fp:
 		meta = json.load(fp)
 
-	frame = meta["frames"][15]
+	frame = meta["frames"][0]
 	fname = os.path.join(data_dir, frame['file_path'][2:])
 
 	factor = 4
 	#image intrinsics
-	focal, cx, cy = frame['fl_x'], frame['cx'], frame['cy']
+	if multi:
+		focal, cx, cy, ax, ay, w, h = frame['fl_x'], frame['cx'], frame['cy'], \
+			frame['camera_angle_x'], frame['camera_angle_y'], frame['w']/factor, frame['h']/factor
+	else:
+		focal, cx, cy, ax, ay, w, h = meta['fl_x'], meta['cx'], meta['cy'], \
+			meta['camera_angle_x'], meta['camera_angle_y'], meta['w']/factor, meta['h']/factor
+	
 	K = np.array([[focal, 0, cx], [0, focal, cy], [0, 0, 1]])
 	K[:2, :] /= factor
-	ax = frame['camera_angle_x']
-	ay = frame['camera_angle_y']
-
-	w, h = frame['w']/factor, frame['h']/factor
 
 	c2w = np.array(frame["transform_matrix"])
 	camtoworlds = sphericalPoses(c2w, numberOfFrames)
@@ -126,9 +130,9 @@ def parse_args():
 	parser.add_argument("--video_spp", type=int, default=8, help="Number of samples per pixel. A larger number means less noise, but slower rendering.")
 	parser.add_argument("--video_output", type=str, default="video.mp4", help="Filename of the output video.")
 
-	parser.add_argument("--save_mesh", default="", help="Output a marching-cubes based mesh from the NeRF or SDF model. Supports OBJ and PLY format.")
+	parser.add_argument("--save_mesh", default="", help="Output a marching-cubes based mesh from the NeRF or SDF model. Supports OBJ and PLY format to path.")
 	parser.add_argument("--save_mesh_ply", default="", help="Output a marching-cubes based mesh from the NeRF or SDF model. PLY format.")
-	parser.add_argument("--marching_cubes_res", default=256, type=int, help="Sets the resolution for the marching cubes grid.")
+	parser.add_argument("--marching_cubes_res", default=512, type=int, help="Sets the resolution for the marching cubes grid.")
 
 	parser.add_argument("--width", "--screenshot_w", type=int, default=0, help="Resolution width of GUI and screenshots.")
 	parser.add_argument("--height", "--screenshot_h", type=int, default=0, help="Resolution height of GUI and screenshots.")
@@ -137,12 +141,17 @@ def parse_args():
 	parser.add_argument("--train", action="store_true", help="If the GUI is enabled, controls whether training starts immediately.")
 	parser.add_argument("--n_steps", type=int, default=-1, help="Number of steps to train for before quitting.")
 	parser.add_argument("--second_window", action="store_true", help="Open a second window containing a copy of the main output.")
+	parser.add_argument("--depth_supervision", type=float, default=0.0, help="Depth supervision strength (lambda)")
 
 	parser.add_argument("--sharpen", default=0, help="Set amount of sharpening applied to NeRF training images. Range 0.0 to 1.0.")
 	parser.add_argument("--depth", action="store_true", help="Render and save a depth image.")
 	parser.add_argument("--nadir", default="", help="Render and save a nadir image from base_cam.json")
 	parser.add_argument("--spherical", default=0, help="Create spherical video with number of frames in a sphere")
-
+	parser.add_argument("--optimize_extrinsics", action="store_true", help="train extrinsics")
+	parser.add_argument("--optimize_focal", action="store_true", help="train focal length")
+	parser.add_argument("--optimize_distortion", action="store_true", help="train distortion")
+	parser.add_argument("--optimize_exposure", action="store_true", help="train exposure")
+	parser.add_argument("--optimize_extra_dims", action="store_true", help="train extra dimensions")
 
 	return parser.parse_args()
 
@@ -236,8 +245,9 @@ if __name__ == "__main__":
 			ref_transforms = json.load(f)
 		print(f"aabb_scale: {ref_transforms['aabb_scale']}")
 		print(f"scale: {ref_transforms['scale']}")
-		enu_height = np.mean(np.array(
-			[frame["transform_matrix"] for frame in ref_transforms["frames"]])[:, 2, 3])
+		enu_height = np.linalg.norm(np.array(
+			[frame["transform_matrix"] for frame in ref_transforms["frames"]])[:, :3, 3])
+		multi = True if "fl_x" in ref_transforms["frames"][0] else False
 
 	testbed.shall_train = args.train if args.gui else True
 
@@ -246,10 +256,18 @@ if __name__ == "__main__":
 	testbed.nerf.render_with_lens_distortion = True
 	print(f"render_with_lens_distortion: {testbed.nerf.render_with_lens_distortion}")
 
-	testbed.nerf.training.optimize_extrinsics = True
+	testbed.nerf.training.optimize_extrinsics = args.optimize_extrinsics
 	print(f"Train Extrinsics: {testbed.nerf.training.optimize_extrinsics}")
-	testbed.nerf.training.optimize_focal_length = False
+	testbed.nerf.training.optimize_focal_length = args.optimize_focal
 	print(f"Train Focal length: {testbed.nerf.training.optimize_focal_length}")
+	testbed.nerf.training.optimize_distortion = args.optimize_distortion
+	print(f"Train Distortion: {testbed.nerf.training.optimize_distortion}")
+	testbed.nerf.training.optimize_exposure = args.optimize_exposure
+	print(f"Train exposure: {testbed.nerf.training.optimize_exposure}")
+	testbed.nerf.training.optimize_extra_dims = args.optimize_extra_dims
+	print(f"Train Extra dims: {testbed.nerf.training.optimize_extra_dims}")
+	testbed.nerf.training.depth_supervision_lambda = args.depth_supervision
+	print(f"Depth Supervision Lambda: {testbed.nerf.training.depth_supervision_lambda}")
 
 	if args.mode == "sdf":
 		setup_colored_sdf(testbed, args.scene)
@@ -343,7 +361,8 @@ if __name__ == "__main__":
     
 		#testbed.nerf.rendering_min_transmittance = 0.5
 		testbed.fov_axis = 0
-		testbed.fov = ref_transforms["frames"][0]["camera_angle_x"] * 180 / np.pi
+		testbed.fov = ref_transforms["frames"][0]["camera_angle_x"] * 180 / np.pi if multi \
+			else ref_transforms["camera_angle_x"] * 180 / np.pi
 		testbed.shall_train = False
 		
 		with tqdm(list(enumerate(test_transforms["frames"])), unit="images", desc=f"Rendering test frame") as t:
@@ -439,7 +458,9 @@ if __name__ == "__main__":
 
 	if ref_transforms:
 		testbed.fov_axis = 0
-		testbed.fov = ref_transforms["frames"][0]["camera_angle_x"] * 180 / np.pi
+		testbed.fov = ref_transforms["frames"][0]["camera_angle_x"] * 180 / np.pi if multi \
+			else ref_transforms["camera_angle_x"] * 180 / np.pi
+
 		if not args.screenshot_frames:
 			args.screenshot_frames = range(len(ref_transforms["frames"]))
 		print(args.screenshot_frames)
@@ -513,6 +534,7 @@ if __name__ == "__main__":
 
 		testbed.fov_axis = 0
 		testbed.fov = nadir['path'][0]['fov']
+		print(f"Nadir FOV: {testbed.fov}")
 		qvec = np.array(tuple(map(float, nadir['path'][0]['R'])))
 		tvec = np.array(tuple(map(float, nadir['path'][0]['T'])))
 		rm = Rotation.from_quat(qvec)
@@ -527,6 +549,7 @@ if __name__ == "__main__":
 		mat[:, 1] *= -1
 		#enu_height = 2300
 		mat[2, 3] = enu_height # For ENU with aabb. Coordinates here are in meters
+		print(f"Nadir Height: {enu_height}")
 		#testbed.up_dir = [0.000,1.000,0.000]
 		#testbed.view_dir = [0.000,-1.000,0.000]
 		#testbed.look_at = [0.500,2.000,0.500]
@@ -556,7 +579,7 @@ if __name__ == "__main__":
 		plt.imsave(outname, gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=100)
 
 	if args.spherical:
-		c2w, K, angle_x, _ = generateSphericalTestPoses(args.scene, int(args.spherical))
+		c2w, K, angle_x, _ = generateSphericalTestPoses(args.scene, int(args.spherical), multi)
 		enu_height = np.mean(c2w[:, 2, 3])
 		fov = angle_x * 180 / np.pi
 		testbed.fov = fov
