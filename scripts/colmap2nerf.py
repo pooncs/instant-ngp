@@ -161,11 +161,11 @@ if __name__ == "__main__":
 		run_ffmpeg(args)
 	if args.run_colmap:
 		run_colmap(args)
-	AABB_SCALE = int(args.aabb_scale)
-	SKIP_EARLY = int(args.skip_early)
-	IMAGE_FOLDER = args.images
-	TEXT_FOLDER = args.text
-	OUT_PATH = args.out
+	AABB_SCALE = 1 #int(args.aabb_scale)
+	SKIP_EARLY = 0 #int(args.skip_early)
+	IMAGE_FOLDER = "/home/ubuntu/ws/data/nerf/shuttleTest8png/images" #args.images
+	TEXT_FOLDER =  "/home/ubuntu/ws/data/nerf/shuttleTest8png/sparse/0" #args.text
+	OUT_PATH = "/home/ubuntu/ws/data/nerf/shuttleTest8png" #args.out
 	print(f"outputting to {OUT_PATH}...")
 	with open(os.path.join(TEXT_FOLDER,"cameras.txt"), "r") as f:
 		angle_x = math.pi / 2
